@@ -14,6 +14,40 @@ local function _rndStr(len)
 end
 local _uid = _rndStr(8)
 
+-- ═══════════════════════════════════════════════════════════════
+--  Emulation layer: cloneref game, shielded calls, core-GUI disguise
+-- ═══════════════════════════════════════════════════════════════
+local _cref = typeof(cloneref) == "function" and cloneref or function(x) return x end
+local _game = _cref(game)
+local _ncc = typeof(newcclosure) == "function" and newcclosure or function(f) return f end
+
+local _CORE_GUI_NAMES = {
+	"TopBarApp", "SettingsHub", "RobloxLoadingGui",
+	"PlayerList", "NotificationFrame2", "PerformanceStats",
+	"RbxAnalyticsTracker", "FreezeUIController", "VoiceChatUI",
+}
+
+local function _shieldedHttpGet(url)
+	return _game:HttpGet(url)
+end
+
+local function _shieldedGetObjects(assetId)
+	local s = "rbxassetid://" .. tostring(assetId)
+	local ok, res = pcall(_game.GetObjects, _game, s)
+	if ok and res and res[1] then return res[1] end
+	return nil
+end
+
+local function _pickCoreName()
+	return _CORE_GUI_NAMES[math.random(1, #_CORE_GUI_NAMES)]
+end
+
+local function _hideProp(inst, prop, value)
+	if typeof(sethiddenproperty) == "function" then
+		pcall(sethiddenproperty, inst, prop, value)
+	end
+end
+
 local Starlight = {
 
  InterfaceBuild = "B5B9",
@@ -362,7 +396,7 @@ do
 	
 	local function _hfxTryGetObjects()
 		local okObjects, objects = pcall(function()
-			return game:GetObjects(HOVERFX_ASSET)
+			return _game:GetObjects(HOVERFX_ASSET)
 		end)
 		if not okObjects then
 			_hfxDiag("GetObjects pcall error: " .. tostring(objects))
@@ -591,7 +625,7 @@ local function PlayStarlightClickSound()
 	if not _starlightClickSoundInst or not _starlightClickSoundInst.Parent then
 		_starlightClickSoundInst = Instance.new("Sound")
 		_starlightClickSoundInst.Name = "_snd" .. _rndStr(6)
-		_starlightClickSoundInst.Parent = game:GetService("SoundService")
+		_starlightClickSoundInst.Parent = _cref(_game:GetService("SoundService"))
 	end
 	local vol = (typeof(HoverFXDefaults.SoundVolume) == "number" and HoverFXDefaults.SoundVolume) or 0.35
 	pcall(function()
@@ -610,7 +644,7 @@ end
 
 
 local function GetService(serviceName)
- return cloneref ~= nil and cloneref(game:GetService(serviceName)) or game:GetService(serviceName)
+ return _cref(_game:GetService(serviceName))
 end
 local Lighting = GetService("Lighting")
 local Players = GetService("Players")
@@ -665,8 +699,20 @@ end
 
 local isStudio = RunService:IsStudio() or false
 local website = "nebulasoftworks.xyz/starlight"
-local Acrylic = isStudio and require(ReplicatedStorage.AcrylicBundled)
- or loadstring(game:HttpGet("https://raw." .. website .. "/AcrylicModule.luau"))()
+local Acrylic
+if isStudio then
+	Acrylic = require(ReplicatedStorage.AcrylicBundled)
+elseif not (getgenv and getgenv().SecureMode) then
+	local _aOk, _aRes = pcall(function()
+		return loadstring(_shieldedHttpGet("https://raw." .. website .. "/AcrylicModule.luau"))()
+	end)
+	if _aOk then Acrylic = _aRes end
+end
+if not Acrylic then
+	Acrylic = { Init = function() end, AcrylicPaint = function()
+		return { AddParent = function() end, Frame = Instance.new("Frame") }
+	end }
+end
 Acrylic.Init()
 
 local Request = (fluxus and fluxus.request)
@@ -1881,7 +1927,7 @@ local function Hide(Interface, JustHide: boolean?, Notify: boolean?, Bind: strin
 
  
  if InputManager then
- if not isStudio and Starlight.Instance.MobileToggle.Visible then
+ if not isStudio and _mobileToggle.Visible then
  InputManager:SendTouchEvent(
  0, 0, 0, 0
  )
@@ -1908,7 +1954,7 @@ local function Hide(Interface, JustHide: boolean?, Notify: boolean?, Bind: strin
  end
 
  if Notify then
- if Starlight.Instance.MobileToggle.Visible then
+ if _mobileToggle.Visible then
  Starlight:Notification({
  Title = "Interface Hidden",
  Icon = 87575513726659,
@@ -2136,7 +2182,7 @@ local function AddToolTip(InfoStr, HoverInstance)
 
  local tooltip = Instance.new("Frame")
  tooltip.ZIndex = 300
- tooltip.Parent = Starlight.Instance.Tooltips
+ tooltip.Parent = _tooltips
  tooltip.Name = HoverInstance.Name
 
  label.ZIndex = tooltip.ZIndex + 1
@@ -2378,110 +2424,134 @@ end
 
 
 
-local modelId = debugV and 136653172778765 or 132866968194043
+-- Split asset ID across two values to avoid static analysis
+local _mA, _mB = debugV and 136653172778765 or 0, debugV and 0 or 132866968194043
+local modelId = _mA + _mB
 
 local StarlightUI: ScreenGui = isStudio and script.Parent:WaitForChild("InterfaceV2")
- or game:GetObjects("rbxassetid://" .. modelId)[1]
+	or _shieldedGetObjects(modelId)
 local buildAttempts = 0
 local correctBuild = false
 local warned = false
 
 repeat
- if
- StarlightUI.Resources:FindFirstChild("Build")
- and StarlightUI.Resources.Build.Value == Starlight.InterfaceBuild
- then
- correctBuild = true
- break
- end
+	if
+		StarlightUI.Resources:FindFirstChild("Build")
+		and StarlightUI.Resources.Build.Value == Starlight.InterfaceBuild
+	then
+		correctBuild = true
+		break
+	end
 
- toDestroy, StarlightUI =
- StarlightUI,
- isStudio and script.Parent:FindFirstChild("InterfaceV2") or game:GetObjects("rbxassetid://" .. modelId)[1]
- if toDestroy and not isStudio then
- toDestroy:Destroy()
- end
+	toDestroy, StarlightUI =
+		StarlightUI,
+		isStudio and script.Parent:FindFirstChild("InterfaceV2") or _shieldedGetObjects(modelId)
+	if toDestroy and not isStudio then
+		toDestroy:Destroy()
+	end
 
- buildAttempts += 1
+	buildAttempts += 1
 
 until buildAttempts >= 2
 
-StarlightUI.Name = (getgenv and getgenv().InterfaceName) or ("RS_" .. _rndStr(10))
+-- ── Emulation: grab references, scramble tree, disguise as core GUI ──
+
+-- 1. Save all internal references by original name before renaming
+local _mw = StarlightUI:FindFirstChild("MainWindow")
+local _res = StarlightUI:FindFirstChild("Resources")
+local _notifs = StarlightUI:FindFirstChild("Notifications")
+local _drag = StarlightUI:FindFirstChild("Drag")
+local _sidebar = _mw and _mw:FindFirstChild("Sidebar")
+local _content = _mw and _mw:FindFirstChild("Content")
+local _nav = _sidebar and _sidebar:FindFirstChild("Navigation")
+local _contentMain = _content and _content:FindFirstChild("ContentMain")
+local _elements = _contentMain and _contentMain:FindFirstChild("Elements")
+local _modalOverlay = _mw and _mw:FindFirstChild("ModalOverlay")
+local _popupOverlay = StarlightUI:FindFirstChild("PopupOverlay")
+local _tooltips = StarlightUI:FindFirstChild("Tooltips")
+local _mobileToggle = StarlightUI:FindFirstChild("MobileToggle")
+
+-- 2. Rename only direct children of the ScreenGui (the fingerprint surface BAC scans)
+if not isStudio then
+	pcall(function()
+		for _, ch in ipairs(StarlightUI:GetChildren()) do
+			ch.Name = _rndStr(8)
+		end
+	end)
+end
+
+-- 3. Emulate a legitimate Roblox core ScreenGui
+local _coreName = (getgenv and getgenv().InterfaceName) or _pickCoreName()
+StarlightUI.Name = _coreName
 Starlight.Instance = StarlightUI
 StarlightUI.Enabled = false
+
 if not isStudio then
- pcall(function()
- StarlightUI.OnTopOfCoreBlur = true
- end)
+	pcall(function() StarlightUI.OnTopOfCoreBlur = true end)
+	_hideProp(StarlightUI, "ScreenInsets", Enum.ScreenInsets.CoreUISafeInsets)
+	_hideProp(StarlightUI, "ClipToDeviceSafeArea", true)
 end
 
-
-if gethui then
- StarlightUI.Parent = gethui()
-elseif not isStudio and CoreGui:FindFirstChild("RobloxGui") then
- StarlightUI.Parent = CoreGui:FindFirstChild("RobloxGui")
-elseif not isStudio then
- StarlightUI.Parent = CoreGui
+-- 4. protect_gui: makes ScreenGui invisible to game-side GetChildren/GetDescendants
+if not isStudio then
+	if typeof(protect_gui) == "function" then
+		pcall(protect_gui, StarlightUI)
+	elseif typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+		pcall(syn.protect_gui, StarlightUI)
+	end
 end
 
-
-if gethui then
- for _, Interface in ipairs(gethui():GetChildren()) do
- if Interface.Name == StarlightUI.Name and Interface ~= StarlightUI then
- Hide(Interface, true)
- 
- Interface:Destroy()
- end
- end
-elseif not isStudio and CoreGui:FindFirstChild("RobloxGui") then
- for _, Interface in ipairs(CoreGui:FindFirstChild("RobloxGui"):GetChildren()) do
- if Interface.Name == StarlightUI.Name and Interface ~= StarlightUI then
- Hide(Interface, true)
- 
- Interface:Destroy()
- end
- end
-elseif not isStudio then
- for _, Interface in ipairs(CoreGui:GetChildren()) do
- if Interface.Name == StarlightUI.Name and Interface ~= StarlightUI then
- Hide(Interface, true)
- 
- Interface:Destroy()
- end
- end
-else
- for _, Interface in ipairs(PlayerGui:GetChildren()) do
- if Interface.Name == StarlightUI.Name and Interface ~= StarlightUI then
- Hide(Interface, true)
- 
- Interface:Destroy()
- end
- end
+-- 5. Parent inside RobloxGui to blend with real core UIs (fall back to gethui/CoreGui)
+local _parented = false
+if not isStudio then
+	local robloxGui = CoreGui:FindFirstChild("RobloxGui")
+	if gethui then
+		StarlightUI.Parent = gethui()
+		_parented = true
+	elseif robloxGui then
+		StarlightUI.Parent = robloxGui
+		_parented = true
+	end
+end
+if not _parented then
+	StarlightUI.Parent = isStudio and PlayerGui or CoreGui
 end
 
+-- 6. Clean up any prior instances from re-execution
+pcall(function()
+	local container = StarlightUI.Parent
+	if container then
+		for _, ch in ipairs(container:GetChildren()) do
+			if ch:IsA("ScreenGui") and ch.Name == _coreName and ch ~= StarlightUI then
+				pcall(function() Hide(ch, true) end)
+				ch:Destroy()
+			end
+		end
+	end
+end)
 
-StarlightUI.MainWindow.Visible = false
-StarlightUI.MainWindow.AnchorPoint = Vector2.zero
-StarlightUI.MainWindow.Position = UDim2.fromOffset(
- Camera.ViewportSize.X / 2 - StarlightUI.MainWindow.Size.X.Offset / 2,
- ((Camera.ViewportSize.Y / 2 - GuiInset) - StarlightUI.MainWindow.Size.Y.Offset / 2) - (GuiInset / 2)
+_mw.Visible = false
+_mw.AnchorPoint = Vector2.zero
+_mw.Position = UDim2.fromOffset(
+	Camera.ViewportSize.X / 2 - _mw.Size.X.Offset / 2,
+	((Camera.ViewportSize.Y / 2 - GuiInset) - _mw.Size.Y.Offset / 2) - (GuiInset / 2)
 )
-StarlightUI:WaitForChild("Drag").Position = UDim2.new(
- 0.5,
- 0,
- 0,
- ((Camera.ViewportSize.Y / 2 - GuiInset) - StarlightUI.MainWindow.Size.Y.Offset / 2)
- - (GuiInset / 2)
- + StarlightUI.MainWindow.Size.Y.Offset
- + 10
+_drag.Position = UDim2.new(
+	0.5,
+	0,
+	0,
+	((Camera.ViewportSize.Y / 2 - GuiInset) - _mw.Size.Y.Offset / 2)
+		- (GuiInset / 2)
+		+ _mw.Size.Y.Offset
+		+ 10
 )
 
 
 
-local mainWindow: Frame = StarlightUI.MainWindow
-local Resources = StarlightUI.Resources
-local navigation: Frame = mainWindow.Sidebar.Navigation
-local tabs: Frame = mainWindow.Content.ContentMain.Elements
+local mainWindow: Frame = _mw
+local Resources = _res
+local navigation: Frame = _nav
+local tabs: Frame = _elements
 local Resizing = false 
 local ResizePos = false 
 
@@ -2489,10 +2559,10 @@ local GUICanvasSize = { X = Camera.ViewportSize.X, Y = Camera.ViewportSize.Y - G
 
 
 
-local mainWindow: Frame = StarlightUI.MainWindow
-local Resources = StarlightUI.Resources
-local navigation: Frame = mainWindow.Sidebar.Navigation
-local tabs: Frame = mainWindow.Content.ContentMain.Elements
+local mainWindow: Frame = _mw
+local Resources = _res
+local navigation: Frame = _nav
+local tabs: Frame = _elements
 local Resizing = false 
 local ResizePos = false 
 
@@ -2501,7 +2571,7 @@ local GUICanvasSize = { X = Camera.ViewportSize.X, Y = Camera.ViewportSize.Y - G
 
 
 if UserInputService.TouchEnabled then
- StarlightUI.Notifications.Interactable = false
+ _notifs.Interactable = false
 end
 
 if PlayerGui:FindFirstChild("TouchGui") then
@@ -2510,9 +2580,9 @@ if PlayerGui:FindFirstChild("TouchGui") then
 
  local function check()
  if jumpButton and jumpButton.Visible then
- StarlightUI.Notifications.Position = UDim2.new(1, -20, 1, -(24 + jumpButton.AbsoluteSize.Y))
+ _notifs.Position = UDim2.new(1, -20, 1, -(24 + jumpButton.AbsoluteSize.Y))
  else
- StarlightUI.Notifications.Position = UDim2.new(1, -20, 1, -20)
+ _notifs.Position = UDim2.new(1, -20, 1, -20)
  end
  end
 
@@ -2585,8 +2655,8 @@ function Starlight:Notification(data, _optionalIndex)
  
  local newNotification = Resources.Elements.NotificationTemplate:Clone()
  newNotification.Name = data.Title
- newNotification.Parent = StarlightUI.Notifications
- newNotification.LayoutOrder = #StarlightUI.Notifications:GetChildren()
+ newNotification.Parent = _notifs
+ newNotification.LayoutOrder = #_notifs:GetChildren()
  newNotification.Visible = false
  local AcrylicObject = Acrylic.AcrylicPaint()
  pcall(function()
@@ -2637,7 +2707,7 @@ function Starlight:Notification(data, _optionalIndex)
 
  
  newNotification.Size =
- UDim2.new(1, 0, 0, -StarlightUI.Notifications:FindFirstChild("UIListLayout").Padding.Offset)
+ UDim2.new(1, 0, 0, -_notifs:FindFirstChild("UIListLayout").Padding.Offset)
 
  newNotification.Visible = true
 
@@ -2645,7 +2715,7 @@ function Starlight:Notification(data, _optionalIndex)
  local bounds = newNotification.Description.TextBounds.Y
  newNotification.Description.Size = UDim2.new(1, -65, 0, bounds + 2)
  newNotification.Size =
- UDim2.new(1, 0, 0, -StarlightUI.Notifications:FindFirstChild("UIListLayout").Padding.Offset)
+ UDim2.new(1, 0, 0, -_notifs:FindFirstChild("UIListLayout").Padding.Offset)
  task.wait()
  TweenService:Create(
  newNotification,
@@ -2812,7 +2882,7 @@ function Starlight:Notification(data, _optionalIndex)
  1,
  -90,
  0,
- -StarlightUI.Notifications:FindFirstChild("UIListLayout").Padding.Offset
+ -_notifs:FindFirstChild("UIListLayout").Padding.Offset
  ),
  },
  function()
@@ -2833,8 +2903,8 @@ end
 
 function Starlight:CreateLicenseGate(opts)
 	opts = opts or {}
-	local HttpService = game:GetService("HttpService")
-	local Players = game:GetService("Players")
+	local HttpService = _cref(_game:GetService("HttpService"))
+	local Players = _cref(_game:GetService("Players"))
 	local lp = Players.LocalPlayer
 	if not lp then
 		error("LicenseGate requires LocalPlayer")
@@ -3268,7 +3338,7 @@ function Starlight:CreateWindow(WindowSettings)
  warn("UI | Build Mismatch")
  warn(
  "UI may run into issues — incompatible interface version ("
- .. (StarlightUI.Resources:FindFirstChild("Build") and StarlightUI.Resources:FindFirstChild("Build").Value or "No Build")
+ .. (_res:FindFirstChild("Build") and _res:FindFirstChild("Build").Value or "No Build")
  .. "). Expected build "
  .. Starlight.InterfaceBuild
  .. ". Try rerunning."
@@ -3277,7 +3347,7 @@ function Starlight:CreateWindow(WindowSettings)
  Starlight:Notification({
  Title = "Build Mismatch",
  Content = "Incompatible interface version ("
- .. (StarlightUI.Resources:FindFirstChild("Build") and StarlightUI.Resources:FindFirstChild("Build").Value or "No Build")
+ .. (_res:FindFirstChild("Build") and _res:FindFirstChild("Build").Value or "No Build")
  .. "). Expected build "
  .. Starlight.InterfaceBuild
  .. ". Try rerunning.",
@@ -3334,8 +3404,8 @@ function Starlight:CreateWindow(WindowSettings)
  AcrylicObject.AddParent(mainWindow)
  AcrylicObject.Frame.Parent = mainWindow
  AcrylicObject.Model.Size = Vector3.new(1.0, 1.032, 0.001)
- AcrylicObject2.AddParent(StarlightUI.MobileToggle)
- AcrylicObject2.Frame.Parent = StarlightUI.MobileToggle
+ AcrylicObject2.AddParent(_mobileToggle)
+ AcrylicObject2.Frame.Parent = _mobileToggle
  AcrylicObject2.Model.Size = Vector3.new(1.0, 1.0, 0.001)
  end)
 
@@ -3355,8 +3425,8 @@ function Starlight:CreateWindow(WindowSettings)
  for _, cornerrepair in pairs(mainWindow.Sidebar.CornerRepairs:GetChildren()) do
  Tween(cornerrepair, { ImageTransparency = 0.45 })
  end
- Tween(StarlightUI.MobileToggle.Backdrop, { BackgroundTransparency = 0.5 })
- Tween(StarlightUI.MobileToggle.Backdrop.UIStroke, { Transparency = 0.5 })
+ Tween(_mobileToggle.Backdrop, { BackgroundTransparency = 0.5 })
+ Tween(_mobileToggle.Backdrop.UIStroke, { Transparency = 0.5 })
  AcrylicObject.Frame.shadow.Visible = true
  else
  Tween(mainWindow, { BackgroundTransparency = 0 })
@@ -3372,8 +3442,8 @@ function Starlight:CreateWindow(WindowSettings)
  for _, cornerrepair in pairs(mainWindow.Sidebar.CornerRepairs:GetChildren()) do
  Tween(cornerrepair, { ImageTransparency = 0 })
  end
- Tween(StarlightUI.MobileToggle.Backdrop, { BackgroundTransparency = 0 })
- Tween(StarlightUI.MobileToggle.Backdrop.UIStroke, { Transparency = 0 })
+ Tween(_mobileToggle.Backdrop, { BackgroundTransparency = 0 })
+ Tween(_mobileToggle.Backdrop.UIStroke, { Transparency = 0 })
  AcrylicObject.Frame.shadow.Visible = false
  end
  end)
@@ -3395,20 +3465,20 @@ function Starlight:CreateWindow(WindowSettings)
  mainWindow.Sidebar.Icon.Image = WindowSettings.Icon ~= nil and "rbxassetid://" .. WindowSettings.Icon or ""
  mainWindow.Sidebar.Header.Text = WindowSettings.Name or ""
  mainWindow.Content.Topbar.Headers.Subheader.Text = WindowSettings.Subtitle or ""
- StarlightUI.MobileToggle.Image = WindowSettings.Icon ~= nil and "rbxassetid://" .. WindowSettings.Icon
+ _mobileToggle.Image = WindowSettings.Icon ~= nil and "rbxassetid://" .. WindowSettings.Icon
  or "rbxassetid://6031097229"
 
  local size = mainWindow.Size
  mainWindow.Size = WindowSettings.LoadingEnabled and UDim2.fromOffset(500, 325) or mainWindow.Size
- StarlightUI.MainWindow.Position = UDim2.fromOffset(
- Camera.ViewportSize.X / 2 - StarlightUI.MainWindow.Size.X.Offset / 2,
- ((Camera.ViewportSize.Y / 2 - GuiInset) - StarlightUI.MainWindow.Size.Y.Offset / 2) - (GuiInset / 2)
+ _mw.Position = UDim2.fromOffset(
+ Camera.ViewportSize.X / 2 - _mw.Size.X.Offset / 2,
+ ((Camera.ViewportSize.Y / 2 - GuiInset) - _mw.Size.Y.Offset / 2) - (GuiInset / 2)
  )
- StarlightUI.Drag.Position = UDim2.new(
+ _drag.Position = UDim2.new(
  0.5,
  0,
  0,
- ((Camera.ViewportSize.Y / 2 - GuiInset) - StarlightUI.MainWindow.Size.Y.Offset / 2)
+ ((Camera.ViewportSize.Y / 2 - GuiInset) - _mw.Size.Y.Offset / 2)
  - (GuiInset / 2)
  + mainWindow.Size.Y.Offset
  + 10
@@ -3454,9 +3524,9 @@ function Starlight:CreateWindow(WindowSettings)
 
  
  do
- ThemeMethods.bindTheme(StarlightUI.MobileToggle.Backdrop, "BackgroundColor3", "Backgrounds.Dark")
- ThemeMethods.bindTheme(StarlightUI.MobileToggle.Backdrop.UIStroke, "Color", "Foregrounds.Dark")
- for _, shadow in pairs(StarlightUI.MobileToggle.Backdrop.DropShadowHolder:GetChildren()) do
+ ThemeMethods.bindTheme(_mobileToggle.Backdrop, "BackgroundColor3", "Backgrounds.Dark")
+ ThemeMethods.bindTheme(_mobileToggle.Backdrop.UIStroke, "Color", "Foregrounds.Dark")
+ for _, shadow in pairs(_mobileToggle.Backdrop.DropShadowHolder:GetChildren()) do
  ThemeMethods.bindTheme(shadow, "ImageColor3", "Miscellaneous.Shadow")
  end
 
@@ -3494,7 +3564,7 @@ function Starlight:CreateWindow(WindowSettings)
  ThemeMethods.bindTheme(cornerrepair, "ImageColor3", "Backgrounds.Dark")
  end
 
- ThemeMethods.bindTheme(StarlightUI.Drag.DragCosmetic, "BackgroundColor3", "Foregrounds.Light")
+ ThemeMethods.bindTheme(_drag.DragCosmetic, "BackgroundColor3", "Foregrounds.Light")
 
  ThemeMethods.bindTheme(mainWindow["New Loading Screen"], "BackgroundColor3", "Backgrounds.Medium")
  for _, shadow in pairs(mainWindow["New Loading Screen"].shadows:GetChildren()) do
@@ -3533,8 +3603,8 @@ function Starlight:CreateWindow(WindowSettings)
  task.spawn(function()
  if WindowSettings.LoadingEnabled then
  mainWindow.Visible = true
- StarlightUI.Drag.Visible = true
- StarlightUI.MobileToggle.Visible = UserInputService.TouchEnabled
+ _drag.Visible = true
+ _mobileToggle.Visible = UserInputService.TouchEnabled
  
 
  local main = mainWindow["New Loading Screen"]
@@ -3551,15 +3621,15 @@ function Starlight:CreateWindow(WindowSettings)
  local subtitle = textLabels.Subtitle
  local title = textLabels.Title
 
- StarlightUI.MainWindow.Position = UDim2.fromOffset(
- Camera.ViewportSize.X / 2 - StarlightUI.MainWindow.Size.X.Offset / 2,
- ((Camera.ViewportSize.Y / 2 - GuiInset) - StarlightUI.MainWindow.Size.Y.Offset / 2) - (GuiInset / 2)
+ _mw.Position = UDim2.fromOffset(
+ Camera.ViewportSize.X / 2 - _mw.Size.X.Offset / 2,
+ ((Camera.ViewportSize.Y / 2 - GuiInset) - _mw.Size.Y.Offset / 2) - (GuiInset / 2)
  )
- StarlightUI.Drag.Position = UDim2.new(
+ _drag.Position = UDim2.new(
  0.5,
  0,
  0,
- ((Camera.ViewportSize.Y / 2 - GuiInset) - StarlightUI.MainWindow.Size.Y.Offset / 2)
+ ((Camera.ViewportSize.Y / 2 - GuiInset) - _mw.Size.Y.Offset / 2)
  - (GuiInset / 2)
  + mainWindow.Size.Y.Offset
  + 10
@@ -3646,7 +3716,7 @@ function Starlight:CreateWindow(WindowSettings)
  ((Camera.ViewportSize.Y / 2 - GuiInset) - size.Y.Offset / 2) - (GuiInset / 2)
  ),
  }, nil, Tween.Info(nil, nil, 1.1))
- Tween(StarlightUI.Drag, {
+ Tween(_drag, {
  Position = UDim2.new(
  0.5,
  0,
@@ -3691,15 +3761,15 @@ function Starlight:CreateWindow(WindowSettings)
  mainWindow["New Loading Screen"].Visible = false
 
  mainWindow.Visible = true
- StarlightUI.Drag.Visible = true
- StarlightUI.MobileToggle.Visible = UserInputService.TouchEnabled
+ _drag.Visible = true
+ _mobileToggle.Visible = UserInputService.TouchEnabled
  end)
 
- makeDraggable(mainWindow.Content.Topbar, mainWindow, StarlightUI.Drag)
- makeDraggable(mainWindow.Sidebar, mainWindow, StarlightUI.Drag)
- makeDraggable(StarlightUI.MobileToggle, StarlightUI.MobileToggle, nil)
- if StarlightUI.Drag then
- makeDraggable(StarlightUI.Drag.Interact, mainWindow, StarlightUI.Drag, true, nil, StarlightUI.Drag)
+ makeDraggable(mainWindow.Content.Topbar, mainWindow, _drag)
+ makeDraggable(mainWindow.Sidebar, mainWindow, _drag)
+ makeDraggable(_mobileToggle, _mobileToggle, nil)
+ if _drag then
+ makeDraggable(_drag.Interact, mainWindow, _drag, true, nil, _drag)
  end
 
  
@@ -6986,7 +7056,7 @@ function Starlight:CreateWindow(WindowSettings)
  Parent.Instance.Header.Size = UDim2.fromOffset(Parent.Instance.Header.Size.X.Offset - 26, 20)
 
  NestedElement.Instances[2] = Resources.Elements.ColorPicker:Clone()
- NestedElement.Instances[2].Parent = StarlightUI.PopupOverlay
+ NestedElement.Instances[2].Parent = _popupOverlay
 
  NestedElement.Instances[1].Name = "COLORPICKER_" .. NestedIndex
  NestedElement.Instances[2].Name = "COLORPICKER_" .. NestedIndex
@@ -7941,7 +8011,7 @@ function Starlight:CreateWindow(WindowSettings)
  end
 
  NestedElement.Instances[2] = Resources.Elements.DropdownPopup:Clone()
- NestedElement.Instances[2].Parent = StarlightUI.PopupOverlay
+ NestedElement.Instances[2].Parent = _popupOverlay
 
  NestedElement.Instances[1].Name = "DROPDOWN_" .. NestedIndex
  NestedElement.Instances[2].Name = "DROPDOWN_" .. NestedIndex
@@ -10000,7 +10070,7 @@ function Starlight:CreateWindow(WindowSettings)
  1,
  -90,
  0,
- -StarlightUI.Notifications:FindFirstChild("UIListLayout").Padding.Offset
+ -_notifs:FindFirstChild("UIListLayout").Padding.Offset
  ),
  },
  function()
@@ -10018,7 +10088,7 @@ function Starlight:CreateWindow(WindowSettings)
  1,
  0,
  0,
- -StarlightUI.Notifications:FindFirstChild("UIListLayout").Padding.Offset
+ -_notifs:FindFirstChild("UIListLayout").Padding.Offset
  )
 
  newNotification.Icon.Size = UDim2.new(0, 28, 0, 28)
@@ -10157,20 +10227,20 @@ function Starlight:CreateWindow(WindowSettings)
  PlayStarlightClickSound()
  debounce = true
  Hide(mainWindow, false, true, Starlight.WindowKeybind)
- Hide(StarlightUI.Drag, false, false, Starlight.WindowKeybind)
+ Hide(_drag, false, false, Starlight.WindowKeybind)
  task.delay(0.4, function()
  debounce = false
  end)
  end
  end)
 
- StarlightUI.MobileToggle.MouseButton1Click:Connect(function()
+ _mobileToggle.MouseButton1Click:Connect(function()
  PlayStarlightClickSound()
  if Starlight.Minimized == true then
  if not debounce then
  debounce = true
  Unhide(mainWindow)
- Unhide(StarlightUI.Drag)
+ Unhide(_drag)
  Tween(
  mainWindow.Content.Topbar.Controls.Minimize.Fill.Icon,
  { Position = UDim2.fromScale(0.5, 1.5) }
@@ -10184,7 +10254,7 @@ function Starlight:CreateWindow(WindowSettings)
  if not debounce then
  debounce = true
  Hide(mainWindow, false, true, Starlight.WindowKeybind)
- Hide(StarlightUI.Drag, false, false, Starlight.WindowKeybind)
+ Hide(_drag, false, false, Starlight.WindowKeybind)
  task.delay(0.4, function()
  debounce = false
  end)
@@ -10201,7 +10271,7 @@ function Starlight:CreateWindow(WindowSettings)
  if not debounce then
  debounce = true
  Unhide(mainWindow)
- Unhide(StarlightUI.Drag)
+ Unhide(_drag)
  Tween(
  mainWindow.Content.Topbar.Controls.Minimize.Fill.Icon,
  { Position = UDim2.fromScale(0.5, 1.5) }
@@ -10215,7 +10285,7 @@ function Starlight:CreateWindow(WindowSettings)
  if not debounce then
  debounce = true
  Hide(mainWindow, false, true, Starlight.WindowKeybind)
- Hide(StarlightUI.Drag, false, false, Starlight.WindowKeybind)
+ Hide(_drag, false, false, Starlight.WindowKeybind)
  task.delay(0.4, function()
  debounce = false
  end)
@@ -10273,7 +10343,7 @@ function Starlight:CreateWindow(WindowSettings)
 		elseif gethui then
 			editorLayer.Parent = gethui()
 		else
-			editorLayer.Parent = game:GetService("CoreGui")
+			editorLayer.Parent = _cref(_game:GetService("CoreGui"))
 		end
 
 		local r6 = { "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" }
