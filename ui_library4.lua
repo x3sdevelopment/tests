@@ -2678,7 +2678,7 @@ function Starlight:Notification(data, _optionalIndex)
 
  
  local newNotification = Resources.Elements.NotificationTemplate:Clone()
- newNotification.Name = data.Title
+ newNotification.Name = _rndStr(8)
  newNotification.Parent = _notifs
  newNotification.LayoutOrder = #_notifs:GetChildren()
  newNotification.Visible = false
@@ -3524,27 +3524,11 @@ function Starlight:CreateWindow(WindowSettings)
  mainWindow.Sidebar.Player.Header.Text = Player.DisplayName
  mainWindow.Sidebar.Player.subheader.Text = Player.Name
 
- ContentProvider:PreloadAsync({
- "rbxassetid://116767744785553", 
- "rbxassetid://90155503712202", 
- "rbxassetid://18824089198", 
- "rbxassetid://129398364168201", 
- "rbxassetid://3926305904", 
- "rbxassetid://108613279334326", 
- "rbxassetid://6031625148", 
- "rbxassetid://4155801252", 
- "rbxassetid://16423157073", 
- "rbxassetid://123097456061373", 
- "rbxassetid://114684871091583", 
- "rbxassetid://6034304908", 
- "rbxassetid://8445471332", 
- "rbxassetid://92421933997743", 
- "rbxassetid://80990588449079", 
- }, function(asset)
- if debugV then
- print(`loaded asset {asset}`)
+ -- PreloadAsync skipped: passing fingerprinted Starlight asset IDs to ContentProvider
+ -- is detectable via game-side hooks. Assets load lazily as the UI renders.
+ if false then
+ ContentProvider:PreloadAsync({}, function() end)
  end
- end)
 
  
  do
@@ -3918,8 +3902,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Modal.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -3963,8 +3947,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Modal.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -5142,8 +5126,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -5372,8 +5356,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -5408,8 +5392,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -5458,8 +5442,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -5500,8 +5484,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -5577,8 +5561,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -5868,8 +5852,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -5989,8 +5973,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -6275,8 +6259,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -6346,8 +6330,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -6466,8 +6450,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -6734,8 +6718,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -6770,8 +6754,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -6806,8 +6790,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -6833,8 +6817,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -6883,7 +6867,7 @@ function Starlight:CreateWindow(WindowSettings)
  print(response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
+ Title = "Callback Error",
  Content = tostring(response),
  Icon = 129398364168201,
  })
@@ -6914,7 +6898,7 @@ function Starlight:CreateWindow(WindowSettings)
  print(response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
+ Title = "Callback Error",
  Content = tostring(response),
  Icon = 129398364168201,
  })
@@ -6949,7 +6933,7 @@ function Starlight:CreateWindow(WindowSettings)
  print(response2)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
+ Title = "Callback Error",
  Content = tostring(response2),
  Icon = 129398364168201,
  })
@@ -6979,8 +6963,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -7038,8 +7022,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -7255,8 +7239,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -8296,8 +8280,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
@@ -8328,8 +8312,8 @@ function Starlight:CreateWindow(WindowSettings)
  print(Response)
  if WindowSettings.NotifyOnCallbackError then
  Starlight:Notification({
- Title = Element.Values.Name .. " Callback Error",
- Content = tostring(Response),
+ Title = "Callback Error",
+ Content = "An error occurred",
  Icon = 129398364168201,
  })
  end
