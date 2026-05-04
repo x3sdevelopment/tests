@@ -38,6 +38,28 @@ local function _hideProp(inst, prop, value)
 	end
 end
 
+-- Shielded filesystem layer: clonefunction strips BAC's hooks from UNC globals,
+-- newcclosure hides the Lua call stack so BAC can't trace calls back to us.
+local _cf = typeof(clonefunction) == "function" and clonefunction or function(f) return f end
+local _fs = {}
+do
+	local _wrap = function(name)
+		local raw = getfenv()[name] or (type(getgenv) == "function" and getgenv()[name])
+		if typeof(raw) == "function" then
+			return _ncc(_cf(raw))
+		end
+		return nil
+	end
+	_fs.isfile    = _wrap("isfile")
+	_fs.readfile  = _wrap("readfile")
+	_fs.writefile = _wrap("writefile")
+	_fs.isfolder  = _wrap("isfolder")
+	_fs.makefolder = _wrap("makefolder")
+	_fs.listfiles = _wrap("listfiles")
+	_fs.delfile   = _wrap("delfile")
+	_fs.delfolder = _wrap("delfolder")
+end
+
 local Starlight = {
 
  InterfaceBuild = "B5B9",
@@ -1622,12 +1644,12 @@ local ConfigMethods = {
  end
  end,
  UpdateOld = function(oldPath, newPath)
- local list = listfiles(oldPath) or {}
+ local list = (_fs.listfiles and _fs.listfiles(oldPath)) or {}
 
  for i = 1, #list do
  local file = list[i]
  if file:sub(-#Starlight.FileSystem.FileExtension) == Starlight.FileSystem.FileExtension then
- local content = readfile(file)
+ local content = _fs.readfile(file)
 
  local pos = file:find(Starlight.FileSystem.FileExtension, 1, true)
  local start = pos
@@ -1641,11 +1663,11 @@ local ConfigMethods = {
  if char == "/" or char == "\\" then
  local name = file:sub(pos + 1, start - 1)
  if name ~= "options" then
- writefile(`{newPath}/{name}{Starlight.FileSystem.FileExtension}`, content)
+ _fs.writefile(`{newPath}/{name}{Starlight.FileSystem.FileExtension}`, content)
  end
  end
 
- delfile(file)
+ _fs.delfile(file)
  end
  end
  end,
@@ -8792,7 +8814,7 @@ function Starlight:CreateWindow(WindowSettings)
  and `{Starlight.FileSystem.Folder}/{root}/themes`
  or `{Starlight.FileSystem.Folder}/{folderpath}/themes`
 
- if not isStudio and not isfolder(themesPath) then
+ if not isStudio and _fs.isfolder and not _fs.isfolder(themesPath) then
  Starlight.FileSystem:BuildFolderTree(WindowSettings.FileSettings)
  end
 
@@ -9363,7 +9385,7 @@ function Starlight:CreateWindow(WindowSettings)
  newName.CurrentValue = string.gsub(newName.CurrentValue, "\\", " ")
 
  if
- isfile(`{themesPath}/{newName.CurrentValue}{Starlight.FileSystem.FileExtension}`)
+ (_fs.isfile and _fs.isfile(`{themesPath}/{newName.CurrentValue}{Starlight.FileSystem.FileExtension}`))
  or themesArray[newName.CurrentValue]
  then
  Starlight:Notification({
@@ -9375,7 +9397,7 @@ function Starlight:CreateWindow(WindowSettings)
  end
 
  local success, returned = pcall(function()
- if isStudio or not isfile then
+ if isStudio or not _fs.isfile then
  return "File System unavailable."
  end
 
@@ -9386,7 +9408,7 @@ function Starlight:CreateWindow(WindowSettings)
  return false, "Unable to encode into JSON data"
  end
 
- writefile(fullPath, encoded)
+ _fs.writefile(fullPath, encoded)
  end)
  if not success then
  Starlight:Notification({
@@ -9464,7 +9486,7 @@ function Starlight:CreateWindow(WindowSettings)
  else
  Starlight:SetTheme(
  ThemeMethods.decodeTheme(
- readfile(`{themesPath}/{newThemeToApply}{Starlight.FileSystem.FileExtension}`)
+ _fs.readfile(`{themesPath}/{newThemeToApply}{Starlight.FileSystem.FileExtension}`)
  )
  )
  end
@@ -9494,7 +9516,7 @@ function Starlight:CreateWindow(WindowSettings)
  end
 
  local success, returned = pcall(function()
- if isStudio or not isfile then
+ if isStudio or not _fs.isfile then
  return "File System unavailable."
  end
 
@@ -9505,7 +9527,7 @@ function Starlight:CreateWindow(WindowSettings)
  return false, "Unable to encode into JSON data"
  end
 
- writefile(fullPath, encoded)
+ _fs.writefile(fullPath, encoded)
  end)
  if not success then
  Starlight:Notification({
@@ -9524,11 +9546,17 @@ function Starlight:CreateWindow(WindowSettings)
  end,
  }, "overwritetheme")
 
+ local _autoThemeName = "Starlight"
+ if not isStudio and _fs.isfile then
+ pcall(function()
+ if _fs.isfile(`{themesPath}/autoload.txt`) then
+ _autoThemeName = _fs.readfile(`{themesPath}/autoload.txt`)
+ end
+ end)
+ end
  local loadlabel = instance:CreateParagraph({
  Name = "Current Autoload Theme:",
- Content = not isStudio and (isfile(`{themesPath}/autoload.txt`) and readfile(
- `{themesPath}/autoload.txt`
- )) or "Starlight",
+ Content = _autoThemeName,
  }, "autoloadlabel")
 
  instance:CreateButton({
@@ -9546,7 +9574,7 @@ function Starlight:CreateWindow(WindowSettings)
  end
  local name = newThemeToApply
  pcall(function()
- writefile(`{themesPath}/autoload.txt`, name)
+ _fs.writefile(`{themesPath}/autoload.txt`, name)
  end)
  loadlabel:Set({ Content = name })
 
@@ -9567,8 +9595,8 @@ function Starlight:CreateWindow(WindowSettings)
  Icon = 6034767619,
  CenteredContent = ButtonsCentered,
  Callback = function()
- if isfile(`{themesPath}/autoload.txt`) then
- delfile(`{themesPath}/autoload.txt`)
+ if _fs.isfile and _fs.isfile(`{themesPath}/autoload.txt`) then
+ _fs.delfile(`{themesPath}/autoload.txt`)
  end
  loadlabel:Set({ Content = "None" })
 
@@ -9593,13 +9621,13 @@ function Starlight:CreateWindow(WindowSettings)
  })
  return
  end
- if isfile(`{themesPath}/{newThemeToApply}{Starlight.FileSystem.FileExtension}`) then
- delfile(`{themesPath}/{newThemeToApply}{Starlight.FileSystem.FileExtension}`)
+ if _fs.isfile and _fs.isfile(`{themesPath}/{newThemeToApply}{Starlight.FileSystem.FileExtension}`) then
+ _fs.delfile(`{themesPath}/{newThemeToApply}{Starlight.FileSystem.FileExtension}`)
  end
 
  if loadlabel.Values.Content == newThemeToApply then
- if isfile(`{themesPath}/autoload.txt`) then
- delfile(`{themesPath}/autoload.txt`)
+ if _fs.isfile and _fs.isfile(`{themesPath}/autoload.txt`) then
+ _fs.delfile(`{themesPath}/autoload.txt`)
  end
  loadlabel:Set({ Content = "None" })
  end
@@ -9664,7 +9692,7 @@ function Starlight:CreateWindow(WindowSettings)
  }, "__prebuiltConfigEnvironmentWarning")
  return "Config System Unavailable"
  end
- if not isfile or isfile == nil then
+ if not _fs.isfile then
  instance:CreateParagraph({
  Name = "Config System Unavailable.",
  Content = "Environment Invalid : isFile UNC Function Not Found.",
@@ -9702,7 +9730,7 @@ function Starlight:CreateWindow(WindowSettings)
  inputPath.Values.CurrentValue = string.gsub(inputPath.Values.CurrentValue, "\\", " ")
 
  if
- isfile(
+ _fs.isfile and _fs.isfile(
  `{Starlight.FileSystem.Folder}/{folderpath}/configs/{inputPath.Values.CurrentValue}{Starlight.FileSystem.FileExtension}`
  )
  then
@@ -9848,11 +9876,17 @@ function Starlight:CreateWindow(WindowSettings)
  Style = 2,
  }, "__prebuiltConfigRefresher")
 
+ local _autoConfigName = "None"
+ if _fs.isfile then
+ pcall(function()
+ if _fs.isfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`) then
+ _autoConfigName = _fs.readfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`)
+ end
+ end)
+ end
  local loadlabel = instance:CreateParagraph({
  Name = "Current Autoload Config:",
- Content = isfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`) and readfile(
- `{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`
- ) or "None",
+ Content = _autoConfigName,
  }, "__prebuiltConfigAutoloadLabel")
 
  instance:CreateButton({
@@ -9871,7 +9905,7 @@ function Starlight:CreateWindow(WindowSettings)
  end
  local name = selectedConfig
  pcall(function()
- writefile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`, name)
+ _fs.writefile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`, name)
  end)
  loadlabel:Set({ Content = name })
 
@@ -9902,8 +9936,8 @@ function Starlight:CreateWindow(WindowSettings)
  CenterContent = ButtonsCentered,
  Tooltip = "Removes the autoloading of the current autoload config.",
  Callback = function()
- if isfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`) then
- delfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`)
+ if _fs.isfile and _fs.isfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`) then
+ _fs.delfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`)
  end
  loadlabel:Set({ Content = "None" })
 
@@ -9931,18 +9965,18 @@ function Starlight:CreateWindow(WindowSettings)
  return
  end
  if
- isfile(
+ _fs.isfile and _fs.isfile(
  `{Starlight.FileSystem.Folder}/{folderpath}/configs/{selectedConfig}{Starlight.FileSystem.FileExtension}`
  )
  then
- delfile(
+ _fs.delfile(
  `{Starlight.FileSystem.Folder}/{folderpath}/configs/{selectedConfig}{Starlight.FileSystem.FileExtension}`
  )
  end
 
  if loadlabel.Values.Content == selectedConfig then
- if isfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`) then
- delfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`)
+ if _fs.isfile and _fs.isfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`) then
+ _fs.delfile(`{Starlight.FileSystem.Folder}/{folderpath}/configs/autoload.txt`)
  end
  loadlabel:Set({ Content = "None" })
  end
@@ -11171,8 +11205,7 @@ end
 
 
 function Starlight.FileSystem:BuildFolderTree(FileSettings)
- 
- if isStudio or not isfolder then
+ if isStudio or not _fs.isfolder then
  return "Config system unavailable."
  end
  local paths = {}
@@ -11204,14 +11237,14 @@ function Starlight.FileSystem:BuildFolderTree(FileSettings)
  end
 
  for i, str in ipairs(paths) do
- if not isfolder(str) then
- makefolder(str)
+ if _fs.isfolder and not _fs.isfolder(str) then
+ _fs.makefolder(str)
  end
  end
 end
 
 function Starlight.FileSystem:SaveConfig(file, path)
- if isStudio or not isfile then
+ if isStudio or not _fs.isfile then
  return "Config system unavailable."
  end
 
@@ -11265,12 +11298,12 @@ function Starlight.FileSystem:SaveConfig(file, path)
  return false, "Unable to encode into JSON data"
  end
 
- writefile(fullPath, encoded)
+ _fs.writefile(fullPath, encoded)
  return true
 end
 
 function Starlight.FileSystem:LoadConfig(file, path)
- if isStudio or not isfile then
+ if isStudio or not _fs.isfile then
  return "Config system unavailable."
  end
 
@@ -11279,11 +11312,11 @@ function Starlight.FileSystem:LoadConfig(file, path)
  end
 
  local fullPath = `{path}{file}{Starlight.FileSystem.FileExtension}`
- if not isfile(fullPath) then
+ if not _fs.isfile(fullPath) then
  return false, "Invalid file."
  end
 
- local success, decoded = pcall(HttpService.JSONDecode, HttpService, readfile(fullPath))
+ local success, decoded = pcall(HttpService.JSONDecode, HttpService, _fs.readfile(fullPath))
  if not success then
  return false, "Unable to decode JSON data."
  end
@@ -11298,20 +11331,20 @@ function Starlight.FileSystem:LoadConfig(file, path)
 end
 
 function Starlight.FileSystem:RefreshConfigList(path)
- if isStudio or not isfile then
- return "Config system unavailable."
+ if isStudio or not _fs.isfile then
+ return {}
  end
 
- if not isfolder(path) then
+ if not _fs.isfolder or not _fs.isfolder(path) then
  Starlight:Notification({
- Title = "shitty executor",
+ Title = "Filesystem Error",
  Icon = 0,
- Content = identifyexecutor() .. " is so shit bro.\n your file system is just broken 💀",
+ Content = "Unable to locate path.",
  }, "hdajdnj")
  return {}
  end
 
- local list = listfiles(path) or {}
+ local list = (_fs.listfiles and _fs.listfiles(path)) or {}
 
  local configs = {}
  for i = 1, #list do
@@ -11339,14 +11372,14 @@ function Starlight.FileSystem:RefreshConfigList(path)
 end
 
 function Starlight:LoadAutoloadConfig()
- if isStudio or not isfile then
+ if isStudio or not _fs.isfile then
  return "Config system unavailable."
  end
 
  if
- Starlight.FileSystem.AutoloadConfigPath and isfile(Starlight.FileSystem.AutoloadConfigPath .. "autoload.txt")
+ Starlight.FileSystem.AutoloadConfigPath and _fs.isfile(Starlight.FileSystem.AutoloadConfigPath .. "autoload.txt")
  then
- local name = readfile(Starlight.FileSystem.AutoloadConfigPath .. "autoload.txt")
+ local name = _fs.readfile(Starlight.FileSystem.AutoloadConfigPath .. "autoload.txt")
 
  local success, err = Starlight.FileSystem:LoadConfig(name, Starlight.FileSystem.AutoloadConfigPath)
  if not success then
@@ -11377,18 +11410,18 @@ function Starlight:SetTheme(newTheme)
 end
 
 function Starlight:LoadAutoloadTheme()
- if isStudio or not isfile then
+ if isStudio or not _fs.isfile then
  return "Config system unavailable."
  end
 
- if Starlight.FileSystem.AutoloadThemePath and isfile(Starlight.FileSystem.AutoloadThemePath .. "autoload.txt") then
- local name = readfile(Starlight.FileSystem.AutoloadThemePath .. "autoload.txt")
+ if Starlight.FileSystem.AutoloadThemePath and _fs.isfile(Starlight.FileSystem.AutoloadThemePath .. "autoload.txt") then
+ local name = _fs.readfile(Starlight.FileSystem.AutoloadThemePath .. "autoload.txt")
 
  if Themes[name] then
  Starlight:SetTheme(name)
  else
  local content =
- readfile(Starlight.FileSystem.AutoloadThemePath .. name .. Starlight.FileSystem.FileExtension)
+ _fs.readfile(Starlight.FileSystem.AutoloadThemePath .. name .. Starlight.FileSystem.FileExtension)
  local success, decoded = pcall(HttpService.JSONDecode, HttpService, content)
  if not success then
  return false, "Unable to decode JSON data."
