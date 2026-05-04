@@ -21,12 +21,6 @@ local _cref = typeof(cloneref) == "function" and cloneref or function(x) return 
 local _game = _cref(game)
 local _ncc = typeof(newcclosure) == "function" and newcclosure or function(f) return f end
 
-local _CORE_GUI_NAMES = {
-	"TopBarApp", "SettingsHub", "RobloxLoadingGui",
-	"PlayerList", "NotificationFrame2", "PerformanceStats",
-	"RbxAnalyticsTracker", "FreezeUIController", "VoiceChatUI",
-}
-
 local function _shieldedHttpGet(url)
 	return _game:HttpGet(url)
 end
@@ -36,10 +30,6 @@ local function _shieldedGetObjects(assetId)
 	local ok, res = pcall(_game.GetObjects, _game, s)
 	if ok and res and res[1] then return res[1] end
 	return nil
-end
-
-local function _pickCoreName()
-	return _CORE_GUI_NAMES[math.random(1, #_CORE_GUI_NAMES)]
 end
 
 local function _hideProp(inst, prop, value)
@@ -709,9 +699,34 @@ elseif not (getgenv and getgenv().SecureMode) then
 	if _aOk then Acrylic = _aRes end
 end
 if not Acrylic then
-	Acrylic = { Init = function() end, AcrylicPaint = function()
-		return { AddParent = function() end, Frame = Instance.new("Frame") }
-	end }
+	-- Stub: produces a Frame named "Acrylic" with shadow/tint/Noise children that the library expects
+	Acrylic = {
+		Init = function() end,
+		AcrylicPaint = function()
+			local f = Instance.new("Frame")
+			f.Name = "Acrylic"
+			f.BackgroundTransparency = 1
+			f.BorderSizePixel = 0
+			f.Size = UDim2.fromScale(1, 1)
+			f.ZIndex = -1
+			for _, n in ipairs({ "shadow", "tint", "Noise" }) do
+				local c = Instance.new("Frame")
+				c.Name = n
+				c.BackgroundTransparency = 1
+				c.BorderSizePixel = 0
+				c.Size = UDim2.fromScale(1, 1)
+				c.Parent = f
+			end
+			return {
+				Frame = f,
+				AddParent = function(parent)
+					if parent and typeof(parent) == "Instance" then
+						f.Parent = parent
+					end
+				end,
+			}
+		end,
+	}
 end
 Acrylic.Init()
 
@@ -2424,12 +2439,23 @@ end
 
 
 
--- Split asset ID across two values to avoid static analysis
+-- Prefer pre-built UI from getgenv (set by an inline GUI-to-Lua converter) to bypass
+-- asset ID detection. Falls back to game:GetObjects only if no prebuilt is present.
 local _mA, _mB = debugV and 136653172778765 or 0, debugV and 0 or 132866968194043
-local modelId = _mA + _mB
+local modelId = (getgenv and getgenv().STARLIGHT_ASSET_ID) or (_mA + _mB)
+
+local function _getStarlightUI()
+	local g = (type(getgenv) == "function" and getgenv()) or _G
+	local prebuilt = g.__StarlightPrebuiltUI
+	if typeof(prebuilt) == "Instance" and prebuilt:IsA("ScreenGui") then
+		g.__StarlightPrebuiltUI = nil
+		return prebuilt
+	end
+	return _shieldedGetObjects(modelId)
+end
 
 local StarlightUI: ScreenGui = isStudio and script.Parent:WaitForChild("InterfaceV2")
-	or _shieldedGetObjects(modelId)
+	or _getStarlightUI()
 local buildAttempts = 0
 local correctBuild = false
 local warned = false
@@ -2445,7 +2471,7 @@ repeat
 
 	toDestroy, StarlightUI =
 		StarlightUI,
-		isStudio and script.Parent:FindFirstChild("InterfaceV2") or _shieldedGetObjects(modelId)
+		isStudio and script.Parent:FindFirstChild("InterfaceV2") or _getStarlightUI()
 	if toDestroy and not isStudio then
 		toDestroy:Destroy()
 	end
@@ -2480,16 +2506,14 @@ if not isStudio then
 	end)
 end
 
--- 3. Emulate a legitimate Roblox core ScreenGui
-local _coreName = (getgenv and getgenv().InterfaceName) or _pickCoreName()
+-- 3. Use innocuous random name (impersonating core GUIs triggers AC's duplicate check)
+local _coreName = (getgenv and getgenv().InterfaceName) or _rndStr(10)
 StarlightUI.Name = _coreName
 Starlight.Instance = StarlightUI
 StarlightUI.Enabled = false
 
 if not isStudio then
 	pcall(function() StarlightUI.OnTopOfCoreBlur = true end)
-	_hideProp(StarlightUI, "ScreenInsets", Enum.ScreenInsets.CoreUISafeInsets)
-	_hideProp(StarlightUI, "ClipToDeviceSafeArea", true)
 end
 
 -- 4. protect_gui: makes ScreenGui invisible to game-side GetChildren/GetDescendants
